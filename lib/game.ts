@@ -4,6 +4,7 @@ import {
   EAT_RADIUS_M,
   FINISH,
   FINISH_RADIUS_M,
+  GAP_M,
   FOUND_M,
   GREMLINS,
   GREMLIN_RADIUS_M,
@@ -20,11 +21,12 @@ import {
   PROGRESS_STEP_M,
   ROOM_CHALLENGES,
   STALL_MS,
+  START,
   START_LIVES,
   START_TOKENS,
 } from './config';
 import { bearingDeg, distM, distToSegmentM, lerp } from './geo';
-import type { Fix, LatLng, RawState } from './types';
+import type { Course, Fix, LatLng, RawState } from './types';
 
 /**
  * computeGame is a PURE function: same input, same output, no side effects.
@@ -40,6 +42,8 @@ export type LogKind = 'start' | 'level' | 'pellet' | 'gremlin' | 'lost' | 'found
 export type LogEntry = { id: string; t: number; kind: LogKind; title: string; sub?: string };
 
 export type Game = {
+  /** The start line in use: the host's choice, or the default. */
+  start: Course;
   phase: 'waiting' | 'riding' | 'home';
   startedAt: number | null;
   finishedAt: number | null;
@@ -50,6 +54,8 @@ export type Game = {
   /** Accepted fixes since the start. This is the trail. */
   path: Fix[];
   distanceHomeM: number | null;
+  /** 0 at the start line, 1 at home, by straight-line distance. */
+  progress: number;
   closestM: number | null;
   driftM: number;
   riddenM: number;
@@ -109,6 +115,7 @@ export function levelForDistance(distanceM: number): number {
 // ---------------------------------------------------------------- the game
 
 export function computeGame(raw: RawState, now: number): Game {
+  const start: Course = raw.course ?? START;
   const events = [...raw.events].sort((a, b) => a.t - b.t);
   const track = [...raw.track].sort((a, b) => a.t - b.t);
 
@@ -133,7 +140,7 @@ export function computeGame(raw: RawState, now: number): Game {
   let lastLostT = 0;
 
   if (startedAt !== null) {
-    log.push({ id: `start-${startedAt}`, t: startedAt, kind: 'start', title: 'READY!', sub: 'BLINDFOLD OFF. GET HOME, JOEY.' });
+    log.push({ id: `start-${startedAt}`, t: startedAt, kind: 'start', title: 'Blindfold off', sub: 'Get home, Joey.' });
   }
 
   for (const fix of track) {
@@ -153,20 +160,20 @@ export function computeGame(raw: RawState, now: number): Game {
     riddenM += stepM;
 
     // Dots: eat along the segment he just rode (unless it is a long signal gap).
-    if (prev && stepM < 400) {
+    if (prev && stepM < GAP_M) {
       const steps = Math.max(1, Math.ceil(stepM / 40));
       for (let s = 1; s <= steps; s++) eatAround(lerp(prev, fix, s / steps), eaten);
     } else {
       eatAround(fix, eaten);
     }
 
-    const from = prev && stepM < 400 ? prev : fix;
+    const from = prev && stepM < GAP_M ? prev : fix;
 
     for (const pellet of PELLETS) {
       if (pelletsCollected.has(pellet.id)) continue;
       if (distToSegmentM(pellet, from, fix) <= (pellet.radiusM ?? PELLET_RADIUS_M)) {
         pelletsCollected.add(pellet.id);
-        log.push({ id: `pellet-${pellet.id}`, t: fix.t, kind: 'pellet', title: `POWER PELLET: ${pellet.name}`, sub: pellet.clue });
+        log.push({ id: `pellet-${pellet.id}`, t: fix.t, kind: 'pellet', title: `Hint pellet: ${pellet.name}`, sub: pellet.clue });
       }
     }
 
@@ -174,7 +181,7 @@ export function computeGame(raw: RawState, now: number): Game {
       if (gremlinsCaught.has(gremlin.id)) continue;
       if (distToSegmentM(gremlin, from, fix) <= GREMLIN_RADIUS_M) {
         gremlinsCaught.add(gremlin.id);
-        log.push({ id: `gremlin-${gremlin.id}`, t: fix.t, kind: 'gremlin', title: `CAUGHT BY ${gremlin.name}!`, sub: `DARE: ${gremlin.dare}` });
+        log.push({ id: `gremlin-${gremlin.id}`, t: fix.t, kind: 'gremlin', title: `Caught by ${gremlin.name}`, sub: `${gremlin.place}. Dare: ${gremlin.dare}` });
       }
     }
 
@@ -182,7 +189,7 @@ export function computeGame(raw: RawState, now: number): Game {
     const level = levelForDistance(homeM);
     while (maxLevel < level) {
       maxLevel++;
-      log.push({ id: `level-${maxLevel}`, t: fix.t, kind: 'level', title: `LEVEL ${maxLevel + 1}`, sub: LEVELS[maxLevel].name });
+      log.push({ id: `level-${maxLevel}`, t: fix.t, kind: 'level', title: `Level ${maxLevel + 1}: ${LEVELS[maxLevel].name}`, sub: 'New hints unlocked.' });
     }
 
     closestM = closestM === null ? homeM : Math.min(closestM, homeM);
@@ -195,7 +202,7 @@ export function computeGame(raw: RawState, now: number): Game {
 
     if (homeM <= FINISH_RADIUS_M) {
       finishedAt = fix.t;
-      log.push({ id: 'home', t: fix.t, kind: 'home', title: 'HOME!', sub: 'JOEY MADE IT BACK.' });
+      log.push({ id: 'home', t: fix.t, kind: 'home', title: 'Joey is home', sub: 'Snacks are served.' });
       break;
     }
 
@@ -208,8 +215,8 @@ export function computeGame(raw: RawState, now: number): Game {
         id: `lost-${lostCount}`,
         t: fix.t,
         kind: 'lost',
-        title: 'JOEY IS LOST!',
-        sub: `ROOM CHALLENGE: ${ROOM_CHALLENGES[(lostCount - 1) % ROOM_CHALLENGES.length]}`,
+        title: 'Joey is lost',
+        sub: `Room challenge: ${ROOM_CHALLENGES[(lostCount - 1) % ROOM_CHALLENGES.length]}`,
       });
     } else if (lost) {
       // Lost by drifting: found once he is nearly back to his best distance.
@@ -218,7 +225,7 @@ export function computeGame(raw: RawState, now: number): Game {
       if (recovered) {
         lost = false;
         lastProgressT = fix.t; // fresh stall window
-        log.push({ id: `found-${lostCount}`, t: fix.t, kind: 'found', title: 'BACK ON TRACK', sub: 'NICE RECOVERY.' });
+        log.push({ id: `found-${lostCount}`, t: fix.t, kind: 'found', title: 'Back on track', sub: 'Nice recovery.' });
       }
     }
   }
@@ -231,15 +238,15 @@ export function computeGame(raw: RawState, now: number): Game {
     if (startedAt === null || e.t < startedAt) continue;
     if (e.type === 'hint' && e.level !== undefined && e.tier !== undefined && LEVELS[e.level]) {
       tokensSpent += e.tier;
-      const text = LEVELS[e.level].hints[e.tier - 1];
+      const text = e.text ?? LEVELS[e.level].hints[e.tier - 1];
       lastHint = { level: e.level, tier: e.tier, text, t: e.t };
-      log.push({ id: e.id, t: e.t, kind: 'hint', title: `HINT: ${HINT_TIER_NAMES[e.tier - 1]}`, sub: text });
+      log.push({ id: e.id, t: e.t, kind: 'hint', title: `Hint: ${HINT_TIER_NAMES[e.tier - 1]}`, sub: text });
     } else if (e.type === 'token') {
       tokensGranted++;
-      log.push({ id: e.id, t: e.t, kind: 'token', title: '+1 HINT TOKEN', sub: 'THE ROOM EARNED IT.' });
+      log.push({ id: e.id, t: e.t, kind: 'token', title: '+1 hint token', sub: 'The room earned it.' });
     } else if (e.type === 'finish' && finishedAt === null) {
       finishedAt = e.t;
-      log.push({ id: e.id, t: e.t, kind: 'home', title: 'HOME!', sub: 'JOEY MADE IT BACK.' });
+      log.push({ id: e.id, t: e.t, kind: 'home', title: 'Joey is home', sub: 'Snacks are served.' });
     }
   }
   log.sort((a, b) => a.t - b.t);
@@ -249,6 +256,8 @@ export function computeGame(raw: RawState, now: number): Game {
   const distanceHomeM = last ? distM(last, FINISH) : position ? distM(position, FINISH) : null;
   const driftM = last && closestM !== null ? Math.max(0, distM(last, FINISH) - closestM) : 0;
   const level = distanceHomeM !== null && startedAt !== null ? levelForDistance(distanceHomeM) : 0;
+  const courseM = distM(start, FINISH);
+  const progress = distanceHomeM === null || startedAt === null ? 0 : Math.max(0, Math.min(1, 1 - distanceHomeM / courseM));
 
   // Hot or cold: compare with where he was about a minute ago.
   let trend: Trend = 'STEADY';
@@ -294,6 +303,7 @@ export function computeGame(raw: RawState, now: number): Game {
     phase === 'waiting' ? 'WAITING' : phase === 'home' ? 'HOME' : lost ? 'LOST' : driftM >= DRIFTING_M ? 'DRIFTING' : 'ON TRACK';
 
   return {
+    start,
     phase,
     startedAt,
     finishedAt,
@@ -302,6 +312,7 @@ export function computeGame(raw: RawState, now: number): Game {
     headingDeg,
     path,
     distanceHomeM,
+    progress,
     closestM,
     driftM,
     riddenM,

@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ArcadeMap from '@/components/ArcadeMap';
+import ArcadeMap, { HAS_CARTO, type Basemap } from '@/components/ArcadeMap';
 import PixelSprite from '@/components/PixelSprite';
-import Radar from '@/components/Radar';
-import { FINISH, HINT_TIER_NAMES, LEVELS, START_LIVES } from '@/lib/config';
+import { FINISH, HINT_TIER_NAMES, LEVELS, PAR_MINUTES, START_LIVES } from '@/lib/config';
 import { computeGame, type LogEntry } from '@/lib/game';
-import { bearingDeg, compassPoint, formatClock, formatKm } from '@/lib/geo';
+import { bearingDeg, compassPoint, distM, formatClock, formatKm } from '@/lib/geo';
 import { enableSound, playBlip, playJingle } from '@/lib/sfx';
 import { JOEY_FRAMES } from '@/lib/sprites';
 import { useGameState } from '@/lib/useGameState';
@@ -14,20 +13,29 @@ import { useGameState } from '@/lib/useGameState';
 /** The big screen. Put this on the projector. Add ?demo to the URL to rehearse. */
 
 const BANNER_MS: Partial<Record<LogEntry['kind'], number>> = { gremlin: 10_000, lost: 10_000, hint: 9000, pellet: 7000 };
+const STATUS_LABEL = { WAITING: 'Waiting', 'ON TRACK': 'On track', DRIFTING: 'Drifting', LOST: 'Lost', HOME: 'Home' } as const;
+const PANEL_PADDING = { top: 96, right: 360, bottom: 110, left: 360 };
 
 export default function BigScreen() {
   const [mode, setMode] = useState<'live' | 'demo' | null>(null);
   const [demoSpeed, setDemoSpeed] = useState(30);
   const [follow, setFollow] = useState(false);
-  const [showTiles, setShowTiles] = useState(true);
+  const [basemap, setBasemap] = useState<Basemap>(HAS_CARTO ? 'streets' : 'satellite');
   const [sound, setSound] = useState(false);
   const [banner, setBanner] = useState<LogEntry | null>(null);
+  const [wallClock, setWallClock] = useState('');
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const speed = Number(query.get('speed'));
     if (speed > 0) setDemoSpeed(speed);
+    if (query.get('map') === 'streets') setBasemap('streets');
+    if (query.get('map') === 'satellite') setBasemap('satellite');
     setMode(query.has('demo') ? 'demo' : 'live');
+    const tick = () => setWallClock(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    tick();
+    const timer = setInterval(tick, 15_000);
+    return () => clearInterval(timer);
   }, []);
 
   const { raw, now, online } = useGameState(mode, demoSpeed);
@@ -39,10 +47,7 @@ export default function BigScreen() {
   const newest = game.log[logLength - 1];
   useEffect(() => {
     if (!raw.gameId) return;
-    if (seenLog.current === null) {
-      // First load: do not replay history, except in demo where READY! should show.
-      seenLog.current = mode === 'demo' ? 0 : logLength;
-    }
+    if (seenLog.current === null) seenLog.current = mode === 'demo' ? 0 : logLength; // do not replay history on load
     if (logLength < seenLog.current) {
       seenLog.current = logLength; // game was reset
       setBanner(null);
@@ -68,164 +73,262 @@ export default function BigScreen() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'f') setFollow((v) => !v);
-      if (e.key === 'm') setShowTiles((v) => !v);
+      if (e.key === 'm') setBasemap((v) => (v === 'satellite' ? 'streets' : 'satellite'));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const level = LEVELS[game.level];
-  const homeBearing = game.position ? compassPoint(bearingDeg(game.position, FINISH)) : null;
-  const statusClass = game.status.toLowerCase().replace(' ', '-');
-  const feed = game.log.slice(-5).reverse();
+  const homeBearing = game.position ? bearingDeg(game.position, FINISH) : null;
+  const statusKey = game.status.toLowerCase().replace(' ', '-');
+  const feed = game.log.slice(-6).reverse();
   const signalAgeS = game.position ? Math.round((now - game.position.t) / 1000) : null;
+  const overPar = game.elapsedMs > PAR_MINUTES * 60_000;
+  const courseM = distM(game.start, FINISH);
 
   return (
     <main className="screen">
-      <header className="hud">
-        <div className="hud-title">
-          <span className="logo">JOEY&apos;S WAY HOME</span>
-          {mode === 'demo' ? <span className="tag tag-demo">DEMO</span> : null}
-          {!online ? <span className="tag tag-off">OFFLINE</span> : null}
-        </div>
-        <div className="hud-cell">
-          <span className="hud-label">SCORE</span>
-          <span className="hud-value yellow">{String(game.score).padStart(6, '0')}</span>
-        </div>
-        <div className="hud-cell">
-          <span className="hud-label">LEVEL {game.level + 1}/{LEVELS.length}</span>
-          <span className="hud-value cyan">{level.name}</span>
-        </div>
-        <div className="hud-cell">
-          <span className="hud-label">TO HOME</span>
-          <span className="hud-value green">{game.distanceHomeM === null ? '--' : formatKm(game.distanceHomeM)}</span>
-        </div>
-        <div className="hud-cell">
-          <span className="hud-label">TIME</span>
-          <span className="hud-value">{formatClock(game.elapsedMs)}</span>
-        </div>
-      </header>
+      <ArcadeMap
+        game={game}
+        now={now}
+        follow={follow}
+        basemap={basemap}
+        padding={PANEL_PADDING}
+        onUserPan={() => setFollow(false)}
+        onBasemapFailed={() => setBasemap('streets')}
+      />
+      <div className="shade" aria-hidden />
 
-      <section className="stage">
-        <ArcadeMap game={game} now={now} follow={follow} showTiles={showTiles} onUserPan={() => setFollow(false)} />
-
-        {game.phase === 'waiting' ? (
-          <div className="overlay">
-            <p className="overlay-big blink">INSERT JOEY</p>
-            <p className="overlay-small">
-              {game.position ? 'JOEY IS IN THE UBER. BLINDFOLD ON.' : 'WAITING FOR A SIGNAL FROM JOEY'}
-            </p>
+      {/* ---------------------------------------------------------------- top bar */}
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-row">
+            {mode === 'demo' ? <span className="chip chip-lime">Demo</span> : <span className="chip chip-live">Live</span>}
+            {!online ? <span className="chip chip-red">Offline</span> : null}
+            <span className="brand-name">Joey&apos;s Way Home</span>
           </div>
-        ) : null}
+          <h1 className="title">
+            {game.start.name} → {FINISH.name}
+          </h1>
+          <p className="meta">
+            {wallClock} · Par {PAR_MINUTES} min
+          </p>
+        </div>
 
-        {game.phase === 'home' ? (
-          <div className="overlay overlay-home">
-            <p className="overlay-big rainbow">JOEY IS HOME!</p>
-            <p className="overlay-score">{String(game.score).padStart(6, '0')}</p>
-            <p className="overlay-small">
-              TIME {formatClock(game.elapsedMs)} · RODE {formatKm(game.riddenM)} · {game.dotsEaten} DOTS ·{' '}
-              {game.lives} {game.lives === 1 ? 'LIFE' : 'LIVES'} LEFT · LOST {game.lostCount}X
-            </p>
-          </div>
-        ) : null}
-
-        {banner && game.phase !== 'home' ? (
-          <div className={`banner banner-${banner.kind}`} role="status">
-            <p className="banner-title">{banner.title}</p>
-            {banner.sub ? <p className="banner-sub">{banner.sub}</p> : null}
-          </div>
-        ) : null}
-
-        <div className="controls">
-          <button type="button" onClick={() => setFollow((v) => !v)} aria-pressed={follow}>
-            {follow ? 'CAM: FOLLOW' : 'CAM: OVERVIEW'} [F]
+        <nav className="segmented" aria-label="Camera">
+          <button type="button" aria-pressed={!follow} onClick={() => setFollow(false)}>
+            Overview
           </button>
-          <button type="button" onClick={() => setShowTiles((v) => !v)} aria-pressed={showTiles}>
-            {showTiles ? 'STREETS: ON' : 'STREETS: OFF'} [M]
+          <button type="button" aria-pressed={follow} onClick={() => setFollow(true)}>
+            Follow Joey
           </button>
+        </nav>
+
+        <div className="top-actions">
+          <nav className="segmented small" aria-label="Map style">
+            <button type="button" aria-pressed={basemap === 'satellite'} onClick={() => setBasemap('satellite')}>
+              Satellite
+            </button>
+            <button type="button" aria-pressed={basemap === 'streets'} onClick={() => setBasemap('streets')}>
+              Map
+            </button>
+          </nav>
           <button
             type="button"
+            className="icon-button"
+            aria-pressed={sound}
             onClick={() => {
               enableSound();
               setSound(true);
               playJingle('pellet');
             }}
-            aria-pressed={sound}
           >
-            {sound ? 'SOUND: ON' : 'SOUND: OFF'}
+            {sound ? 'Sound on' : 'Sound off'}
           </button>
         </div>
-      </section>
+      </header>
 
-      <aside className="side">
-        <div className="panel row">
-          <div>
-            <p className="panel-label">LIVES</p>
-            <div className="icons">
-              {Array.from({ length: START_LIVES }, (_, i) => (
-                <PixelSprite key={i} sprite={JOEY_FRAMES[0]} scale={2} dim={i >= game.lives} />
-              ))}
+      {/* ---------------------------------------------------------------- left column */}
+      <aside className="column left">
+        <section className={`card status status-${statusKey}`}>
+          <div className="card-head">
+            <span className="card-label">Status</span>
+            {game.phase === 'riding' ? (
+              <span className={`chip ${game.trend === 'COLDER' ? 'chip-red' : game.trend === 'WARMER' ? 'chip-lime' : ''}`}>
+                {game.trend === 'WARMER' ? 'Warmer' : game.trend === 'COLDER' ? 'Colder' : 'Steady'}
+              </span>
+            ) : null}
+          </div>
+          <div className="status-body">
+            <div>
+              <p className="status-text">{STATUS_LABEL[game.status]}</p>
+              <p className="sub">
+                {game.phase === 'waiting'
+                  ? game.position
+                    ? 'In the Uber, blindfold on'
+                    : 'Waiting for a signal'
+                  : game.phase === 'home'
+                    ? 'Snack time'
+                    : game.driftM >= 50
+                      ? `${formatKm(game.driftM)} off his best`
+                      : 'Heading the right way'}
+              </p>
+              {game.phase === 'riding' && signalAgeS !== null && signalAgeS > 90 ? (
+                <p className="sub red">No signal for {Math.floor(signalAgeS / 60)} min</p>
+              ) : null}
             </div>
+            {homeBearing !== null && game.phase === 'riding' ? (
+              <div className="compass" aria-label={`Home is ${compassPoint(homeBearing)}`}>
+                <span className="compass-n">N</span>
+                <svg viewBox="0 0 40 40" style={{ transform: `rotate(${homeBearing}deg)` }} aria-hidden>
+                  <path d="M20 5 L27 26 L20 22 L13 26 Z" fill="currentColor" />
+                </svg>
+                <span className="compass-label">Home {compassPoint(homeBearing)}</span>
+              </div>
+            ) : null}
           </div>
-          <div>
-            <p className="panel-label">HINT TOKENS</p>
-            <p className="tokens">
-              <span className="token-dot" /> x{game.tokens}
-            </p>
-          </div>
-        </div>
-
-        <div className={`panel status status-${statusClass}`}>
-          <p className="status-text">{game.status}</p>
-          <p className="status-sub">
-            {game.phase === 'riding'
-              ? `${game.trend === 'WARMER' ? 'GETTING WARMER' : game.trend === 'COLDER' ? 'GETTING COLDER' : 'HOLDING STEADY'}${
-                  homeBearing ? ` · HOME IS ${homeBearing}` : ''
-                }`
-              : game.phase === 'home'
-                ? 'SNACK TIME'
-                : 'BLINDFOLD STILL ON'}
-          </p>
-          {game.phase === 'riding' && game.driftM >= 50 ? <p className="status-sub">OFF COURSE BY {formatKm(game.driftM)}</p> : null}
-          {game.phase === 'riding' && signalAgeS !== null && signalAgeS > 90 ? (
-            <p className="status-sub red">NO SIGNAL FOR {Math.floor(signalAgeS / 60)} MIN</p>
-          ) : null}
-        </div>
+        </section>
 
         {game.activeChallenge ? (
-          <div className="panel card card-lost">
-            <p className="panel-label">ROOM CHALLENGE: WIN JOEY A TOKEN</p>
+          <section className="card accent-red">
+            <div className="card-head">
+              <span className="card-label">Room challenge</span>
+              <span className="chip chip-red">Win a token</span>
+            </div>
             <p className="card-text">{game.activeChallenge}</p>
-          </div>
+          </section>
         ) : game.lastHint ? (
-          <div className="panel card card-hint">
-            <p className="panel-label">
-              LAST HINT · {HINT_TIER_NAMES[game.lastHint.tier - 1]} · READ IT TO JOEY
-            </p>
+          <section className="card accent-lime">
+            <div className="card-head">
+              <span className="card-label">Last hint · read it to Joey</span>
+              <span className="chip chip-lime">{HINT_TIER_NAMES[game.lastHint.tier - 1]}</span>
+            </div>
             <p className="card-text">{game.lastHint.text}</p>
-          </div>
+          </section>
         ) : (
-          <div className="panel card">
-            <p className="panel-label">HOW TO HELP</p>
-            <p className="card-text">No directions unless a hint is bought. Pellets earn tokens. Cheer loudly.</p>
-          </div>
+          <section className="card">
+            <div className="card-head">
+              <span className="card-label">House rules</span>
+            </div>
+            <p className="card-text muted">No directions unless a hint is bought. Pellets earn tokens. Keep this screen out of the FaceTime camera.</p>
+          </section>
         )}
+      </aside>
 
-        <div className="panel feed">
-          <p className="panel-label">FEED</p>
-          {feed.length === 0 ? <p className="feed-item dim">NOTHING YET</p> : null}
+      {/* ---------------------------------------------------------------- right column */}
+      <aside className="column right">
+        <section className="card">
+          <div className="stats">
+            <div>
+              <p className="card-label">To home</p>
+              <p className="big">{game.distanceHomeM === null ? '--' : formatKm(game.distanceHomeM)}</p>
+            </div>
+            <div>
+              <p className="card-label">Time</p>
+              <p className={`big ${overPar ? 'red' : ''}`}>{formatClock(game.elapsedMs)}</p>
+            </div>
+            <div>
+              <p className="card-label">Score</p>
+              <p className="big">{game.score.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="card-label">Walked</p>
+              <p className="big">{formatKm(game.riddenM)}</p>
+            </div>
+          </div>
+          <div className="divider" />
+          <div className="inventory">
+            <div>
+              <p className="card-label">Lives</p>
+              <div className="lives">
+                {Array.from({ length: START_LIVES }, (_, i) => (
+                  <PixelSprite key={i} sprite={JOEY_FRAMES[0]} scale={2} dim={i >= game.lives} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="card-label">Hint tokens</p>
+              <p className="tokens">
+                <span className="token" aria-hidden />
+                {game.tokens}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="card feed">
+          <div className="card-head">
+            <span className="card-label">Feed</span>
+          </div>
+          {feed.length === 0 ? <p className="feed-item muted">Nothing yet</p> : null}
           {feed.map((entry) => (
             <p key={entry.id} className={`feed-item feed-${entry.kind}`}>
-              {entry.title}
+              <span className="feed-dot" aria-hidden />
+              <span className="feed-title">{entry.title}</span>
+              <span className="feed-time">{game.startedAt ? formatClock(entry.t - game.startedAt).slice(3) : ''}</span>
             </p>
           ))}
-        </div>
-
-        <div className="panel radar-panel">
-          <p className="panel-label">RADAR</p>
-          <Radar game={game} />
-        </div>
+        </section>
       </aside>
+
+      {/* ---------------------------------------------------------------- bottom: level progress */}
+      <footer className="levelbar">
+        <div className="level-name">
+          <span className="card-label">
+            Level {game.level + 1} of {LEVELS.length}
+          </span>
+          <span className="level-title">{level.name}</span>
+        </div>
+        <div className="track" aria-label={`${Math.round(game.progress * 100)}% of the way home`}>
+          <div className="track-fill" style={{ width: `${game.progress * 100}%` }} />
+          {LEVELS.slice(1).map((l, i) => (
+            <span
+              key={l.name}
+              className={`track-tick ${game.maxLevel > i && game.phase !== 'waiting' ? 'done' : ''}`}
+              style={{ left: `${Math.max(0, 1 - (l.enterKm * 1000) / courseM) * 100}%` }}
+              title={`Level ${i + 2}: ${l.name}`}
+            />
+          ))}
+          <span className="track-joey" style={{ left: `${game.progress * 100}%` }}>
+            <PixelSprite sprite={JOEY_FRAMES[0]} scale={2} />
+          </span>
+        </div>
+        <span className="track-end">Home</span>
+      </footer>
+
+      {/* ---------------------------------------------------------------- overlays */}
+      {game.phase === 'waiting' ? (
+        <div className="overlay">
+          <div className="overlay-card">
+            <p className="card-label">Starting soon</p>
+            <p className="overlay-big">Insert Joey</p>
+            <p className="sub">{game.position ? 'Joey is in the Uber with the blindfold on.' : 'Waiting for a signal from Joey.'}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {game.phase === 'home' ? (
+        <div className="overlay">
+          <div className="overlay-card">
+            <p className="card-label">Final score</p>
+            <p className="overlay-big lime">{game.score.toLocaleString()}</p>
+            <p className="sub">
+              {formatClock(game.elapsedMs)} · walked {formatKm(game.riddenM)} · {game.lives} {game.lives === 1 ? 'life' : 'lives'} left · lost {game.lostCount}×
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {banner && game.phase !== 'home' ? (
+        <div className={`banner banner-${banner.kind}`} role="status">
+          <span className="banner-dot" aria-hidden />
+          <div>
+            <p className="banner-title">{banner.title}</p>
+            {banner.sub ? <p className="banner-sub">{banner.sub}</p> : null}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

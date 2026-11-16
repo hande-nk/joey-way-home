@@ -1,4 +1,5 @@
 import '@fontsource/press-start-2p';
+import '@fontsource-variable/inter';
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const viewport: Viewport = { themeColor: '#05050f', width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = { themeColor: '#0b0c0b', width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

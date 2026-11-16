@@ -1,8 +1,8 @@
 # Joey's Way Home
 
-Arcade-style live tracker for the JumboCode bonding event. Joey gets dropped at a mystery spot with a bike and no map. The room watches him ride home on a projector: pixel Joey eats dots across a real map of Boston, picks up hint pellets, dodges gremlins, and (hopefully) reaches the finish.
+Live tracker for the JumboCode bonding event. Joey gets dropped at a mystery spot (default: Spy Pond Park, Arlington) and walks back to the Joyce Cummings Center with no map. The room watches him on a projector: pixel Joey eats dots across the map, picks up hint pellets, dodges gremlins, and (hopefully) gets home in an hour.
 
-> **Keep this repo private and do not send Joey the link.** The drop-off, the hints and the traps are all in `lib/config.ts`.
+> **Keep this repo private and do not send Joey the link.** The start, the hints and the traps are all in `lib/config.ts`.
 
 ## Try it in 30 seconds
 
@@ -11,15 +11,15 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000/?demo. A scripted Joey rides the whole course, takes two wrong turns, gets caught, gets hints, and finishes. No phone, no database, no keys needed. Add `&speed=60` to go faster.
+Open http://localhost:3000/?demo. A scripted Joey walks the whole course, takes two wrong turns, gets caught, gets hints, and finishes. No phone, no database, no keys needed. Add `&speed=60` to go faster.
 
 ## The three pages
 
 | Page | Who opens it | What it does |
 | --- | --- | --- |
-| `/` | The projector | The game board. Read-only. Keys: `F` follow cam, `M` street map on/off. |
-| `/control?key=HOST_KEY` | The host's laptop | Start, reveal hints, grant tokens, place Joey by hand, reset. |
-| `/rider?key=RIDER_KEY` | Joey's phone | A "share my location" button. No map, no hints. |
+| `/` | The projector | The board. Read-only. Keys: `F` follow cam, `M` switch map style. |
+| `/control?key=HOST_KEY` | The host's laptop | Move the start, start the game, reveal hints (written or custom), grant tokens, place Joey by hand, reset. |
+| `/rider?key=RIDER_KEY` | Joey's phone (option B below) | A "share my location" button. No map, no hints. |
 
 ## How it works (the mental model)
 
@@ -29,76 +29,51 @@ Host laptop ───POST /api/event─────▶ │ Upstash Redis │ ◀
                                      └──────────────┘
 ```
 
-1. **We only store two lists**: GPS fixes and host button presses (`lib/types.ts`).
-2. **Everything else is derived.** `computeGame()` in `lib/game.ts` is a pure function that turns those two lists into score, level, lives, "is he lost", and the feed. Nothing like `score` is ever saved. That is why a refresh, a second screen, or a late joiner always shows the same game. It also makes the logic easy to test (`npm test`).
-3. **Polling, not WebSockets.** The projector asks for new fixes every 2.5 seconds. A bike does not move far in 2.5 seconds, and plain HTTP needs no extra infrastructure on Vercel.
-4. **Why a database at all?** Vercel functions are stateless. Two requests can land on two different servers that share no memory, so the track has to live somewhere outside them. Locally, with no Redis configured, `lib/store.ts` falls back to memory.
-5. **The board is two layers.** A Leaflet street map underneath, and one `<canvas>` on top that we repaint every frame (`components/ArcadeMap.tsx`). Leaflet's only job for the canvas is converting lat/lng to pixels.
-
-```
-app/
-  page.tsx            big screen
-  control/page.tsx    host remote
-  rider/page.tsx      Joey's beacon
-  api/state           GET  game state (public)
-  api/location        POST a GPS fix (rider or host key)
-  api/event           POST start / hint / token / finish / reset (host key)
-components/           ArcadeMap, Radar, PixelSprite
-lib/
-  config.ts           THE GAME: course, levels, hints, pellets, gremlins, scoring
-  game.ts             computeGame(): raw data in, full game out
-  store.ts            Redis (or memory) read/write
-  auth.ts             RIDER_KEY / HOST_KEY check
-  sprites.ts          pixel art as text
-  demo.ts             the scripted demo ride
-```
+1. **We store three things**: GPS fixes, host button presses, and the chosen start (`lib/types.ts`).
+2. **Everything else is derived.** `computeGame()` in `lib/game.ts` is a pure function that turns those into score, level, lives, "is he lost", and the feed. Nothing like `score` is ever saved, so a refresh, a second screen, or a late joiner always shows the same game. It also makes the logic easy to test (`npm test`).
+3. **Polling, not WebSockets.** The projector asks for new fixes every 2.5 seconds. Plain HTTP needs no extra infrastructure on Vercel.
+4. **Why a database at all?** Vercel functions are stateless. Two requests can land on two servers that share no memory. Locally, with no Redis configured, `lib/store.ts` falls back to memory.
+5. **The board is two layers.** A Leaflet map underneath, and one `<canvas>` on top that we repaint every frame (`components/ArcadeMap.tsx`).
 
 ## Deploy to Vercel
 
-1. Push this repo to GitHub (private).
-2. On vercel.com: **Add New > Project**, import the repo, deploy. Defaults are fine.
-3. In the project: **Storage > Create Database > Upstash (Redis)**, free plan, connect it to this project. That adds the Redis env vars for you.
-4. **Settings > Environment Variables**, add two secrets (any long random strings):
-   - `RIDER_KEY`
-   - `HOST_KEY`
-5. **Redeploy** so the new env vars are picked up.
-6. Check: open `/?demo` (works without any of the above), then `/control?key=YOUR_HOST_KEY` and press Reset. If Reset says "GAME WIPED", storage and keys are working.
+1. Import the repo on Vercel and deploy. Defaults are fine.
+2. **Storage** (or Integrations) > **Upstash for Redis**, free plan, connect it to this project.
+3. **Settings > Environment Variables**:
+   - `RIDER_KEY`: any long random string (`openssl rand -hex 16`)
+   - `HOST_KEY`: a different long random string
+   - `NEXT_PUBLIC_CARTO_KEY`: your free key from carto.com/basemaps/apikey (optional, gives the dark street map)
+4. **Redeploy** so the variables are picked up.
+5. Check: open `/control?key=YOUR_HOST_KEY` and press Reset twice. "Game wiped" means storage and keys work.
 
-Without `RIDER_KEY`/`HOST_KEY` the production API refuses all writes on purpose.
+The CARTO key is a browser key: anyone who opens the page can see it in network requests. That is normal for map keys. If CARTO lets you restrict the key to a website, restrict it to your Vercel domain.
 
 ## Getting Joey's location in
 
-Three options. Pick one as the plan and keep another as backup.
+Find My cannot feed the app directly: Apple offers no public API for it. Use one of these:
 
-**A. OwnTracks app (recommended).** Free on iOS and Android, and it keeps sending while the phone is locked or on a FaceTime call. In the app's connection settings choose **HTTP** mode and set the URL to:
+**A. OwnTracks app (recommended).** Free on iOS and Android, no account, and it keeps sending while the phone is locked or on FaceTime. In its settings choose **HTTP** mode and set the URL to:
 
 ```
 https://YOUR-APP.vercel.app/api/location?key=YOUR_RIDER_KEY
 ```
 
-Set its monitoring mode to **Move** so it reports every few seconds, and allow location "Always".
+Set monitoring to **Move** and location permission to **Always**.
 
-**B. The `/rider` page.** Zero install, but phone browsers stop sending GPS when the tab is in the background or the screen locks. Only good if a second phone on the handlebars runs it with the screen on.
+**B. The `/rider` page.** No install. Works during FaceTime as long as Safari stays in front (FaceTime shrinks to picture in picture) and the screen stays on.
 
-**C. By hand.** Joey shares his location with the host (Find My or Google Maps). On `/control`, press "Place Joey by hand" and click the map where he is. Ugly but unbreakable.
+**C. Find My as the backup.** Joey shares his location with the host in Find My. If the beacon dies, the host opens `/control`, presses "Place Joey by hand", and clicks where Find My shows him.
 
-Whatever you pick, **do a 10-minute test ride around campus the day before** with the real phone, the real mount, and FaceTime running.
+Do a 10-minute test walk the day before with the real phone and FaceTime running.
 
-## Event-day checklist
+## Moving the start
 
-- [ ] `/control`: press **Reset game** (clears test data)
-- [ ] Projector on `/`, sound on, browser zoom so the board fills the screen
-- [ ] Joey's beacon is on before he gets in the Uber (the room sees a pixel car)
-- [ ] At the drop: blindfold off, host presses **Start**. The clock runs and dots start counting.
-- [ ] During the ride: reveal hints and grant tokens from `/control`
-- [ ] If GPS misses the finish line, press **Finish by hand**
+On `/control`, under **Start position**: pick a preset or type a name and click "Pick start on map". The start must be within 8 km of the finish and survives a reset. The written hints follow the Spy Pond route, so for other starts use **Custom hint**.
 
 ## Changing the game
 
-Everything is in `lib/config.ts`: `START`, `FINISH`, the seven `LEVELS` with their hints, `PELLETS`, `GREMLINS`, room challenges, scoring, and thresholds for "lost". Run `npm test` after editing. The tests replay the demo ride and catch a broken config.
-
-If the street map looks too dark or too bright on your projector, tweak `--tile-filter` at the top of `app/globals.css`.
+Everything is in `lib/config.ts`: default `START` and `START_PRESETS`, `FINISH`, the five `LEVELS` with their hints, `PELLETS`, `GREMLINS`, room challenges, scoring, and the "lost" thresholds. Run `npm test` after editing.
 
 ## Credits
 
-Map data © OpenStreetMap contributors, tiles © CARTO. Font: Press Start 2P. All sprites are original.
+Map data © OpenStreetMap contributors, © CARTO. Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community. Fonts: Inter, Press Start 2P. All sprites are original.

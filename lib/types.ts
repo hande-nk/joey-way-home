@@ -8,6 +8,9 @@ export type Fix = LatLng & { t: number; acc?: number };
 /** Things only the host can do from /control. */
 export type HostEventType = 'start' | 'hint' | 'token' | 'finish';
 
+/** Where the blindfold comes off. Set by the host, kept across resets. */
+export type Course = LatLng & { name: string };
+
 export type HostEvent = {
   id: string;
   t: number;
@@ -15,6 +18,8 @@ export type HostEvent = {
   /** For hints: which level's hint (0-based) and which tier (1 riddle, 2 landmark, 3 direct). */
   level?: number;
   tier?: 1 | 2 | 3;
+  /** A custom hint typed by the host (used instead of the written one). */
+  text?: string;
 };
 
 /**
@@ -25,4 +30,6 @@ export type RawState = {
   gameId: string;
   track: Fix[];
   events: HostEvent[];
+  /** The start chosen on /control. Missing means the default in config.ts. */
+  course?: Course | null;
 };

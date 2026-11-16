@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import type { Fix, HostEvent } from './types';
+import type { Course, Fix, HostEvent } from './types';
 
 /**
  * Storage layer. Vercel functions are stateless: each request may hit a fresh
@@ -16,12 +16,12 @@ const redis = url && token ? new Redis({ url, token }) : null;
 
 export const usingRedis = redis !== null;
 
-const KEY = { game: 'jwh:game', track: 'jwh:track', events: 'jwh:events' };
+const KEY = { game: 'jwh:game', track: 'jwh:track', events: 'jwh:events', course: 'jwh:course' };
 const MAX_FIXES = 20_000;
 
-type Memory = { gameId: string; track: Fix[]; events: HostEvent[] };
+type Memory = { gameId: string; track: Fix[]; events: HostEvent[]; course: Course | null };
 const globalStore = globalThis as typeof globalThis & { __jwh?: Memory };
-const memory: Memory = (globalStore.__jwh ??= { gameId: 'local', track: [], events: [] });
+const memory: Memory = (globalStore.__jwh ??= { gameId: 'local', track: [], events: [], course: null });
 
 export type Snapshot = {
   gameId: string;
@@ -30,21 +30,23 @@ export type Snapshot = {
   track: Fix[];
   total: number;
   events: HostEvent[];
+  course: Course | null;
 };
 
 export async function readSnapshot(knownGameId: string | null, knownCount: number): Promise<Snapshot> {
   if (!redis) {
     const from = knownGameId === memory.gameId ? Math.min(knownCount, memory.track.length) : 0;
-    return { gameId: memory.gameId, from, track: memory.track.slice(from), total: memory.track.length, events: memory.events };
+    return { gameId: memory.gameId, from, track: memory.track.slice(from), total: memory.track.length, events: memory.events, course: memory.course };
   }
   const gameId = (await redis.get<string>(KEY.game)) ?? 'new';
   const total = await redis.llen(KEY.track);
   const from = knownGameId === gameId ? Math.min(knownCount, total) : 0;
-  const [track, events] = await Promise.all([
+  const [track, events, course] = await Promise.all([
     from >= total ? Promise.resolve([] as Fix[]) : redis.lrange<Fix>(KEY.track, from, -1),
     redis.lrange<HostEvent>(KEY.events, 0, -1),
+    redis.get<Course>(KEY.course),
   ]);
-  return { gameId, from, track, total: from + track.length, events };
+  return { gameId, from, track, total: from + track.length, events, course: course ?? null };
 }
 
 export async function appendFix(fix: Fix): Promise<void> {
@@ -63,7 +65,16 @@ export async function appendEvent(event: HostEvent): Promise<void> {
   await redis.rpush(KEY.events, event);
 }
 
-/** Wipe everything and start a new game. Viewers notice the new gameId and clear their screens. */
+/** Move the start line. Kept across resets on purpose. */
+export async function setCourse(course: Course): Promise<void> {
+  if (!redis) {
+    memory.course = course;
+    return;
+  }
+  await redis.set(KEY.course, course);
+}
+
+/** Wipe the track and events and start a new game. The chosen start stays. Viewers notice the new gameId and clear their screens. */
 export async function resetGame(): Promise<string> {
   const gameId = `g${Date.now().toString(36)}`;
   if (!redis) {

@@ -4,51 +4,42 @@ import { distM, lerp } from './geo';
 import type { Fix, HostEvent, LatLng, RawState } from './types';
 
 /**
- * Demo mode (open /?demo): a fake Joey rides a scripted route with two wrong
+ * Demo mode (open /?demo): a fake Joey walks a scripted route with two wrong
  * turns, so you can rehearse on the projector with no phone and no database.
  * Nothing here touches the server.
  */
 
 const ROUTE: LatLng[] = [
-  START,
-  { lat: 42.29629, lng: -71.1282 }, // Peters Hill gate
-  { lat: 42.2985, lng: -71.1225 },
-  { lat: 42.30089, lng: -71.1139 }, // Forest Hills
-  { lat: 42.3105, lng: -71.1075 }, // Green Street
-  { lat: 42.3171, lng: -71.1042 }, // Stony Brook
-  { lat: 42.3232, lng: -71.0998 }, // Jackson Square
-  { lat: 42.3215, lng: -71.1085 }, // wrong turn west...
-  { lat: 42.316, lng: -71.1185 }, // ...into the goose at Jamaica Pond
-  { lat: 42.3215, lng: -71.1085 },
-  { lat: 42.3232, lng: -71.0998 },
-  { lat: 42.3314, lng: -71.0955 }, // Roxbury Crossing
-  { lat: 42.3365, lng: -71.089 }, // Ruggles
-  { lat: 42.3415, lng: -71.0835 }, // Mass Ave station
-  { lat: 42.3427, lng: -71.0855 }, // Symphony
-  { lat: 42.3489, lng: -71.0885 },
-  { lat: 42.3512, lng: -71.0896 }, // Harvard Bridge, south end
-  { lat: 42.3577, lng: -71.0927 }, // north end
-  { lat: 42.3592, lng: -71.0935 }, // MIT
-  { lat: 42.3654, lng: -71.1037 }, // Central Square
-  { lat: 42.3737, lng: -71.1005 },
-  { lat: 42.3796, lng: -71.0955 }, // Union Square
-  { lat: 42.3812, lng: -71.087 }, // wrong turn east...
-  { lat: 42.3842, lng: -71.0765 }, // ...into the rotary at Sullivan Square
-  { lat: 42.389, lng: -71.088 },
-  { lat: 42.3972, lng: -71.1043 }, // Magoun Square
-  { lat: 42.3995, lng: -71.111 }, // Ball Square
-  { lat: 42.40111, lng: -71.11672 }, // Powder House
-  { lat: 42.405, lng: -71.117 },
+  START, // Spy Pond Park
+  { lat: 42.4146, lng: -71.1507 }, // Arlington Center
+  { lat: 42.415, lng: -71.156 }, // wrong way west on Mass Ave...
+  { lat: 42.4125, lng: -71.1625 },
+  { lat: 42.4109, lng: -71.1668 }, // ...into the Pothole at Menotomy Rocks
+  { lat: 42.4125, lng: -71.1625 },
+  { lat: 42.415, lng: -71.156 },
+  { lat: 42.4146, lng: -71.1507 }, // back at Arlington Center
+  { lat: 42.4115, lng: -71.144 }, // Broadway east
+  { lat: 42.409, lng: -71.1385 },
+  { lat: 42.4069, lng: -71.1336 }, // town line
+  { lat: 42.4011, lng: -71.1285 }, // Teele Square
+  { lat: 42.3967, lng: -71.1223 }, // Davis Square
+  { lat: 42.3935, lng: -71.1228 }, // wrong way south...
+  { lat: 42.392, lng: -71.123 }, // ...into Cone Zone at Porter
+  { lat: 42.3935, lng: -71.1228 },
+  { lat: 42.3967, lng: -71.1223 },
+  { lat: 42.3992, lng: -71.1195 }, // College Ave
+  { lat: 42.4011, lng: -71.1167 }, // Powder House
+  { lat: 42.405, lng: -71.1168 },
   FINISH,
 ];
 
-const SPEED_MPS = 4.5;
-const STEP_M = 20;
+const SPEED_MPS = 1.5; // brisk walk
+const STEP_M = 10;
 
 // Small deterministic wobble so the trail looks like real GPS, not a ruler.
 function wobble(i: number): number {
   const x = Math.sin(i * 12.9898) * 43758.5453;
-  return (x - Math.floor(x) - 0.5) * 0.00006;
+  return (x - Math.floor(x) - 0.5) * 0.00003;
 }
 
 export function buildDemo(startAt: number): RawState {

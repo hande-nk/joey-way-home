@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildDemo } from './demo';
-import type { Fix, HostEvent, RawState } from './types';
+import type { Course, Fix, HostEvent, RawState } from './types';
 
 const EMPTY: RawState = { gameId: '', track: [], events: [] };
 const POLL_MS = 2500;
 
-type ApiState = { gameId: string; from: number; track: Fix[]; total: number; events: HostEvent[]; serverNow: number };
+type ApiState = { gameId: string; from: number; track: Fix[]; total: number; events: HostEvent[]; course: Course | null; serverNow: number };
 
 /**
  * Keeps the browser in sync with the server.
@@ -49,8 +49,9 @@ export function useGameState(mode: 'live' | 'demo' | null, demoSpeed = 30) {
 
         const eventsChanged =
           data.events.length !== prev.events.length || data.events.at(-1)?.id !== prev.events.at(-1)?.id;
-        if (!sameGame || track !== prev.track || eventsChanged) {
-          local.current = { gameId: data.gameId, track, events: data.events };
+        const courseChanged = JSON.stringify(data.course ?? null) !== JSON.stringify(prev.course ?? null);
+        if (!sameGame || track !== prev.track || eventsChanged || courseChanged) {
+          local.current = { gameId: data.gameId, track, events: data.events, course: data.course };
           setRaw(local.current);
         }
         setOnline(true);

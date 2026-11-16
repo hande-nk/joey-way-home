@@ -8,8 +8,9 @@ import { postJson } from '@/lib/useGameState';
  * Open it as /rider?key=RIDER_KEY on his phone.
  *
  * Limit to know about: phone browsers stop sending GPS when the tab is in the
- * background or the screen locks. If Joey is on FaceTime on the same phone,
- * use the OwnTracks app instead (see README). This page is the no-install option.
+ * background or the screen locks. It works during a FaceTime call as long as
+ * Safari stays in front (FaceTime shrinks to picture in picture). The OwnTracks
+ * app (see README) keeps working in the background, so it is the safer choice.
  */
 
 const SEND_EVERY_MS = 4000;
@@ -102,35 +103,36 @@ export default function RiderPage() {
 
   return (
     <main className="simple">
-      <h1 className="logo">JOEY&apos;S WAY HOME</h1>
-      <p className="simple-note">RIDER BEACON. NO MAP, NO HINTS, NO CHEATING.</p>
+      <h1 className="page-title">Joey&apos;s beacon</h1>
+      <p className="sub">No map, no hints, no cheating. This page only sends your location to the room.</p>
 
       <label className="field">
-        <span>RIDER KEY</span>
+        <span>Rider key</span>
         <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="from the host" autoCapitalize="off" autoCorrect="off" />
       </label>
 
       {sharing ? (
         <button type="button" className="big-button stop" onClick={stop}>
-          STOP SHARING
+          Stop sharing
         </button>
       ) : (
         <button type="button" className="big-button go" onClick={start} disabled={!key}>
-          START SHARING
+          Start sharing
         </button>
       )}
 
-      <div className="panel">
-        <p className="panel-label">STATUS</p>
-        <p className={`status-text ${sharing ? 'green' : ''}`}>{sharing ? 'BEACON ON' : 'BEACON OFF'}</p>
-        <p className="status-sub">FIXES SENT: {sent}</p>
-        <p className="status-sub">LAST SENT: {secondsAgo === null ? '--' : `${secondsAgo}S AGO`}</p>
-        <p className="status-sub">GPS ACCURACY: {accuracy === null ? '--' : `${accuracy} M`}</p>
-        {error ? <p className="status-sub red">{error}</p> : null}
+      <div className="card">
+        <span className="card-label">Status</span>
+        <p className={`status-text ${sharing ? 'lime' : 'muted'}`}>{sharing ? 'Beacon on' : 'Beacon off'}</p>
+        <p className="sub">Fixes sent: {sent}</p>
+        <p className="sub">Last sent: {secondsAgo === null ? '--' : `${secondsAgo}s ago`}</p>
+        <p className="sub">GPS accuracy: {accuracy === null ? '--' : `${accuracy} m`}</p>
+        {error ? <p className="sub red">{error}</p> : null}
       </div>
 
-      <p className="simple-note">
-        KEEP THIS TAB OPEN AND THE SCREEN ON. PHONE GOES ON THE MOUNT, NOT IN YOUR HAND. STOP THE BIKE BEFORE YOU TALK TO THE ROOM.
+      <p className="sub">
+        Keep this tab in front and the screen on. FaceTime keeps running as a small picture-in-picture window. Stop walking before you talk to
+        the room.
       </p>
     </main>
   );

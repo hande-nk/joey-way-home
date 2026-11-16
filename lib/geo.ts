@@ -51,7 +51,7 @@ export function distToSegmentM(p: LatLng, a: LatLng, b: LatLng): number {
 }
 
 export function formatKm(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} KM` : `${Math.round(m / 10) * 10} M`;
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`;
 }
 
 export function formatClock(ms: number): string {

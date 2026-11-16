@@ -23,38 +23,43 @@ const PALETTE: Record<string, string> = {
 
 export type Sprite = string[];
 
+/** Joey walking. Two frames, swapped while he moves. Cap is JumboCode yellow. */
 export const JOEY_FRAMES: Sprite[] = [
   [
-    '......yyyy......',
-    '.....yyyyyy.....',
-    '.....ssskss.....',
-    '......ssss......',
-    '....rrrrr.......',
-    '...rrrrrrss.....',
-    '...rrrrr..sgg...',
-    '...bbbbb...g....',
-    '..oobbboooog....',
-    '.ww..bb.o.ww....',
-    'w..w.b.o.w..w...',
-    'w.gwoooo.w.gw...',
-    'w..w.....w..w...',
-    '.ww.......ww....',
+    '...yyyy...',
+    '..yyyyyy..',
+    '..yyyyyyyy',
+    '..ssskss..',
+    '..ssssss..',
+    '...ssss...',
+    '..rrrrrr..',
+    '.rrrrrrrr.',
+    '.srrrrrrs.',
+    '.srrrrrrs.',
+    '..bbbbbb..',
+    '..bb..bb..',
+    '..bb..bb..',
+    '.bb....bb.',
+    '.bb....bb.',
+    'www....www',
   ],
   [
-    '......yyyy......',
-    '.....yyyyyy.....',
-    '.....ssskss.....',
-    '......ssss......',
-    '....rrrrr.......',
-    '...rrrrrrss.....',
-    '...rrrrr..sgg...',
-    '...bbbbb...g....',
-    '..oobbboooog....',
-    '.ww.bb..o.ww....',
-    'wg.wb..o.wg.w...',
-    'w..woooo.w..w...',
-    'w..w.....w..w...',
-    '.ww.......ww....',
+    '...yyyy...',
+    '..yyyyyy..',
+    '..yyyyyyyy',
+    '..ssskss..',
+    '..ssssss..',
+    '...ssss...',
+    '..rrrrrr..',
+    '..rrrrrr..',
+    '..rrrrrrs.',
+    '..srrrrr..',
+    '..bbbbbb..',
+    '...bbbb...',
+    '...bbbb...',
+    '...bbbb...',
+    '...bbbb...',
+    '...wwwww..',
   ],
 ];
 
@@ -153,20 +158,6 @@ export const GREMLIN_SPRITES: Record<string, Sprite> = {
     '............',
     '............',
   ],
-  rotary: [
-    '...bbbbbb...',
-    '..bbwwwwbb..',
-    '.bbw....wbb.',
-    'bbw..bb..wbb',
-    'bw..bbbb..wb',
-    'bw..bbbb.www',
-    'bw..bbbb..w.',
-    'bbw..bb.....',
-    '.bbw....wbb.',
-    '..bbwwwwbb..',
-    '...bbbbbb...',
-    '............',
-  ],
 };
 
 export function drawSprite(
@@ -175,7 +166,7 @@ export function drawSprite(
   centerX: number,
   centerY: number,
   scale: number,
-  opts: { flip?: boolean; alpha?: number } = {},
+  opts: { flip?: boolean; alpha?: number; outline?: string } = {},
 ) {
   const width = Math.max(...sprite.map((row) => row.length));
   const height = sprite.length;
@@ -183,6 +174,18 @@ export function drawSprite(
   const top = Math.round(centerY - (height * scale) / 2);
   ctx.save();
   if (opts.alpha !== undefined) ctx.globalAlpha = opts.alpha;
+  // A one-pixel dark outline keeps the sprite readable on top of satellite imagery.
+  if (opts.outline) {
+    ctx.fillStyle = opts.outline;
+    for (let y = 0; y < height; y++) {
+      const row = sprite[y];
+      for (let x = 0; x < row.length; x++) {
+        if (!PALETTE[row[x]]) continue;
+        const drawX = opts.flip ? width - 1 - x : x;
+        ctx.fillRect(left + (drawX - 1) * scale, top + (y - 1) * scale, scale * 3, scale * 3);
+      }
+    }
+  }
   for (let y = 0; y < height; y++) {
     const row = sprite[y];
     for (let x = 0; x < row.length; x++) {
