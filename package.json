@@ -1,0 +1,29 @@
+{
+  "name": "joey-way-home",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arcade-style live tracker for the JumboCode bonding event: Joey bikes home, the room watches.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test lib/game.test.ts"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
+    "@upstash/redis": "^1.41.0",
+    "leaflet": "1.9",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
