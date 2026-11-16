@@ -388,8 +388,13 @@ export default function ArcadeMap({ game, now, follow, basemap, padding = DEFAUL
           ctx.lineWidth = 1.5;
           ctx.stroke();
           if (game.phase === 'waiting') {
-            drawSprite(ctx, CAR, p.x, p.y, scale, { flip: facingWest, outline: 'rgba(0,0,0,0.65)' });
-            pill('Joey · in the Uber', p.x, p.y - 11 * scale, 'lime', 11);
+            if (game.atStart) {
+              drawSprite(ctx, JOEY_FRAMES[0], p.x, p.y, scale, { flip: facingWest, outline: 'rgba(0,0,0,0.65)' });
+              pill('Joey · at the start', p.x, p.y - 11.5 * scale, 'lime', 11);
+            } else {
+              drawSprite(ctx, CAR, p.x, p.y, scale, { flip: facingWest, outline: 'rgba(0,0,0,0.65)' });
+              pill('Joey · on the way', p.x, p.y - 11 * scale, 'lime', 11);
+            }
           } else {
             const moving = signalAgeS < 20 && game.phase === 'riding';
             const frameIndex = moving ? Math.floor(ms / 260) % 2 : 0;

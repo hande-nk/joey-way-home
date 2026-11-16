@@ -109,6 +109,7 @@ export default function ControlPage() {
             {raw.track.length} GPS fixes
             {game.position ? ` · last one ${Math.max(0, Math.round((now - game.position.t) / 1000))}s ago` : ' · no signal yet'}
           </p>
+          {game.phase === 'waiting' && game.atStart ? <p className="sub lime">Joey is at the start line. Press Start when the blindfold comes off.</p> : null}
           {caughtNames.length ? <p className="sub red">Caught by: {caughtNames.join(', ')}</p> : null}
           {lastDare?.sub ? <p className="sub">{lastDare.sub}</p> : null}
         </div>

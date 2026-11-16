@@ -103,3 +103,10 @@ test('every preset start is a reasonable distance from home', () => {
     assert.ok(km > 1.5 && km < 4, `${p.name} is ${km.toFixed(2)} km away`);
   }
 });
+
+test('a waiting Joey near the start line is shown as at the start', () => {
+  const near = computeGame({ gameId: 'g', track: [{ lat: START.lat + 0.0005, lng: START.lng, t: T0 }], events: [] }, T0);
+  const far = computeGame({ gameId: 'g', track: [{ ...FINISH, t: T0 }], events: [] }, T0);
+  assert.equal(near.atStart, true);
+  assert.equal(far.atStart, false);
+});

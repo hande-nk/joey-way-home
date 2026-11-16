@@ -45,6 +45,8 @@ export type Game = {
   /** The start line in use: the host's choice, or the default. */
   start: Course;
   phase: 'waiting' | 'riding' | 'home';
+  /** Before the start: is Joey's phone already at the start line? */
+  atStart: boolean;
   startedAt: number | null;
   finishedAt: number | null;
   elapsedMs: number;
@@ -111,6 +113,9 @@ export function levelForDistance(distanceM: number): number {
   }
   return level;
 }
+
+/** Within this distance of the start line, a waiting Joey counts as "at the start". */
+const AT_START_M = 150;
 
 // ---------------------------------------------------------------- the game
 
@@ -302,8 +307,11 @@ export function computeGame(raw: RawState, now: number): Game {
   const status: Status =
     phase === 'waiting' ? 'WAITING' : phase === 'home' ? 'HOME' : lost ? 'LOST' : driftM >= DRIFTING_M ? 'DRIFTING' : 'ON TRACK';
 
+  const atStart = position !== null && distM(position, start) <= AT_START_M;
+
   return {
     start,
+    atStart,
     phase,
     startedAt,
     finishedAt,

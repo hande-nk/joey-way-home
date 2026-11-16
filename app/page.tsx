@@ -165,9 +165,11 @@ export default function BigScreen() {
               <p className="status-text">{STATUS_LABEL[game.status]}</p>
               <p className="sub">
                 {game.phase === 'waiting'
-                  ? game.position
-                    ? 'In the Uber, blindfold on'
-                    : 'Waiting for a signal'
+                  ? game.atStart
+                    ? 'At the start line'
+                    : game.position
+                      ? 'On the way, blindfold on'
+                      : 'Waiting for a signal'
                   : game.phase === 'home'
                     ? 'Snack time'
                     : game.driftM >= 50
@@ -303,7 +305,13 @@ export default function BigScreen() {
           <div className="overlay-card">
             <p className="card-label">Starting soon</p>
             <p className="overlay-big">Insert Joey</p>
-            <p className="sub">{game.position ? 'Joey is in the Uber with the blindfold on.' : 'Waiting for a signal from Joey.'}</p>
+            <p className="sub">
+              {game.atStart
+                ? 'Joey is at the start line. The game begins when the host presses Start.'
+                : game.position
+                  ? 'Joey is on the way to the start with the blindfold on.'
+                  : 'Waiting for a signal from Joey.'}
+            </p>
           </div>
         </div>
       ) : null}
