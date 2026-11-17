@@ -1,6 +1,7 @@
 # J's Way Home
 
 Live tracker for the JumboCode bonding event. J gets dropped at a mystery spot (default: Spy Pond Park, Arlington) and walks back to the Joyce Cummings Center with no map. The room watches him on a projector: pixel J eats dots across the map, picks up hint pellets, dodges gremlins, and (hopefully) gets home in an hour.
+<img width="1510" height="820" alt="PNG image" src="https://github.com/user-attachments/assets/fca46864-0726-47c3-9961-aaeb7d0a177b" />
 
 ```bash
 npm install
