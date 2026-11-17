@@ -1,31 +1,27 @@
-# Joey's Way Home
+# J's Way Home
 
-Live tracker for the JumboCode bonding event. Joey gets dropped at a mystery spot (default: Spy Pond Park, Arlington) and walks back to the Joyce Cummings Center with no map. The room watches him on a projector: pixel Joey eats dots across the map, picks up hint pellets, dodges gremlins, and (hopefully) gets home in an hour.
-
-> **Keep this repo private and do not send Joey the link.** The start, the hints and the traps are all in `lib/config.ts`.
-
-## Try it in 30 seconds
+Live tracker for the JumboCode bonding event. J gets dropped at a mystery spot (default: Spy Pond Park, Arlington) and walks back to the Joyce Cummings Center with no map. The room watches him on a projector: pixel J eats dots across the map, picks up hint pellets, dodges gremlins, and (hopefully) gets home in an hour.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000/?demo. A scripted Joey walks the whole course, takes two wrong turns, gets caught, gets hints, and finishes. No phone, no database, no keys needed. Add `&speed=60` to go faster.
+Open http://localhost:3000/?demo. A scripted J walks the whole course, takes two wrong turns, gets caught, gets hints, and finishes. No phone, no database, no keys needed. Add `&speed=60` to go faster.
 
 ## The three pages
 
 | Page | Who opens it | What it does |
 | --- | --- | --- |
 | `/` | The projector | The board. Read-only. Keys: `F` follow cam, `M` switch map style. |
-| `/control?key=HOST_KEY` | The host's laptop | Move the start, start the game, reveal hints (written or custom), grant tokens, place Joey by hand, reset. |
-| `/rider?key=RIDER_KEY` | Joey's phone (option B below) | A "share my location" button. No map, no hints. |
+| `/control?key=HOST_KEY` | The host's laptop | Move the start, start the game, reveal hints (written or custom), grant tokens, place J by hand, reset. |
+| `/rider?key=RIDER_KEY` | J's phone | A "share my location" button. No map, no hints. |
 
 ## How it works (the mental model)
 
 ```
-Joey's phone ──POST /api/location──▶ ┌──────────────┐
-Host laptop ───POST /api/event─────▶ │ Upstash Redis │ ◀──GET /api/state── projector (every 2.5s)
+J's phone ──POST /api/location──▶    ┌──────────────┐
+Host laptop ───POST /api/event─────▶ │ Upstash Redis│ ◀──GET /api/state── projector (every 2.5s)
                                      └──────────────┘
 ```
 
@@ -36,7 +32,7 @@ Host laptop ───POST /api/event─────▶ │ Upstash Redis │ ◀
 5. **The board is two layers.** A Leaflet map underneath, and one `<canvas>` on top that we repaint every frame (`components/ArcadeMap.tsx`).
 
 ## Deploy to Vercel
-
+(CURRENTLY LIVE)
 1. Import the repo on Vercel and deploy. Defaults are fine.
 2. **Storage** (or Integrations) > **Upstash for Redis**, free plan, connect it to this project.
 3. **Settings > Environment Variables**:
@@ -48,23 +44,10 @@ Host laptop ───POST /api/event─────▶ │ Upstash Redis │ ◀
 
 The CARTO key is a browser key: anyone who opens the page can see it in network requests. That is normal for map keys. If CARTO lets you restrict the key to a website, restrict it to your Vercel domain.
 
-## Getting Joey's location in
+## Getting J's location in
 
-Find My cannot feed the app directly: Apple offers no public API for it. Use one of these:
+The `/rider` page.**  Works during FaceTime as long as Safari stays in front (FaceTime shrinks to picture in picture) and the screen stays on.
 
-**A. OwnTracks app (recommended).** Free on iOS and Android, no account, and it keeps sending while the phone is locked or on FaceTime. In its settings choose **HTTP** mode and set the URL to:
-
-```
-https://YOUR-APP.vercel.app/api/location?key=YOUR_RIDER_KEY
-```
-
-Set monitoring to **Move** and location permission to **Always**.
-
-**B. The `/rider` page.** No install. Works during FaceTime as long as Safari stays in front (FaceTime shrinks to picture in picture) and the screen stays on.
-
-**C. Find My as the backup.** Joey shares his location with the host in Find My. If the beacon dies, the host opens `/control`, presses "Place Joey by hand", and clicks where Find My shows him.
-
-Do a 10-minute test walk the day before with the real phone and FaceTime running.
 
 ## Moving the start
 
